@@ -110,4 +110,15 @@ if run_button:
 
                     st.header("Share of Volume (Mesačný priemer)")
                     avg_sov = sov_df.mean()
-                    fig_pie = px.pie(values=avg_sov.values, names=avg_sov.index, title
+                    fig_pie = px.pie(values=avg_sov.values, names=avg_sov.index, title=f'Priemerný podiel za obdobie {start_date.strftime("%d.%m.%Y")} - {end_date.strftime("%d.%m.%Y")}', hole=.4)
+                    st.plotly_chart(fig_pie, use_container_width=True)
+
+                    st.header("Vývoj Share of Volume v čase (Mesačne)")
+                    fig_bar = px.bar(sov_df, x=sov_df.index, y=sov_df.columns, title='Mesačný vývoj SoV', labels={'value': 'Share of Volume (%)', 'index': 'Mesiac', 'variable': 'Kľúčové slovo'})
+                    st.plotly_chart(fig_bar, use_container_width=True)
+
+                    st.header("Podkladové dáta (Mesačný objem vyhľadávaní)")
+                    st.dataframe(wide_df_filtered.drop(columns='Total Volume'))
+
+        except Exception as e:
+            st.error(f"Vyskytla sa chyba: {e}")
