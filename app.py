@@ -6,21 +6,28 @@ from datetime import datetime
 
 # --- Konfigurácia stránky ---
 st.set_page_config(page_title="Share of Volume | Marketing Miner API", layout="wide")
-MM_API_URL = "https://api.marketingminer.com/v1/"
+# SPRÁVNA ZÁKLADNÁ ADRESA PODĽA NOVÉHO ODKAZU
+MM_API_URL = "https://profilers-api.marketingminer.com"
 
 # --- Funkcia na sťahovanie dát z Marketing Miner API (s cachovaním) ---
 @st.cache_data(ttl="24h")
 def fetch_mm_data(api_key, keywords, country_code):
     """
-    Sťahuje dáta o hľadanosti z Marketing Miner API.
+    Sťahuje dáta o hľadanosti z Marketing Miner API pomocou GET požiadavky.
     """
-    endpoint = f"{MM_API_URL}profilers/get-search-volume"
-    headers = {'Authorization': f'Bearer {api_key}', 'Content-Type': 'application/json'}
-    payload_input = [{"keyword": kw, "database": country_code} for kw in keywords]
-    payload = {"input": payload_input}
+    # SPRÁVNA CESTA K ENDPOINTU PODĽA NOVÉHO ODKAZU
+    endpoint = f"{MM_API_URL}/keywords/search-volume-data"
+    
+    # Parametre sa posielajú priamo v URL, nie v tele
+    params = {
+        'token': api_key,
+        'database': country_code,
+        'keywords': list(keywords)
+    }
 
     st.info(f"Posielam požiadavku na Marketing Miner API pre {len(keywords)} kľúčových slov...")
-    response = requests.post(endpoint, headers=headers, json=payload)
+    # Používame GET požiadavku
+    response = requests.get(endpoint, params=params)
 
     if response.status_code != 200:
         raise Exception(f"Chyba pri komunikácii s Marketing Miner API: {response.status_code} - {response.text}")
@@ -33,10 +40,10 @@ def process_mm_response(json_data):
     Spracuje JSON odpoveď z Marketing Miner do čistého Pandas DataFrame.
     """
     all_data = []
-    for keyword_data in json_data.get('result', []):
-        keyword = keyword_data.get('keyword')
-        if keyword_data.get('status') == 'ok' and 'search_volume' in keyword_data['data']:
-            for date_str, volume in keyword_data['data']['search_volume'].items():
+    # Spracovanie odpovede zostáva rovnaké, ak je štruktúra dát podobná
+    for keyword, data in json_data.get('result', {}).items():
+        if data.get('status') == 'ok' and 'search_volume' in data:
+            for date_str, volume in data['search_volume'].items():
                 all_data.append({
                     'Keyword': keyword,
                     'Date': datetime.strptime(date_str, '%Y-%m'),
@@ -48,7 +55,7 @@ def process_mm_response(json_data):
 
 # --- Hlavná aplikácia ---
 st.title("🚀 Share of Volume Analýza (cez Marketing Miner API)")
-st.markdown("Aplikácia pre stabilnú analýzu podielu na trhu s dátami z Marketing Miner.")
+st.markdown("Finálna verzia (v2) napojená na Marketing Miner API pre stabilné dáta.")
 
 # --- Vstupné polia v bočnom paneli ---
 with st.sidebar:
@@ -56,7 +63,7 @@ with st.sidebar:
 
     api_key = st.secrets.get("MARKETING_MINER_API_KEY", "")
     if not api_key:
-        st.error("Chýba API kľúč! Nastavte ho prosím v 'Settings -> Secrets' vašej aplikácie na Streamlit Cloud.")
+        st.error("Chýba API kľúč! Nastavte ho prosím v 'Settings -> Secrets'.")
 
     keywords_input = st.text_area("Zadajte kľúčové slová (oddelené čiarkou)", "Adidas, Nike, Reebok, Puma")
     keyword_list = [kw.strip() for kw in keywords_input.split(',') if kw.strip()]
@@ -86,7 +93,7 @@ if run_button:
                 st.error("Nepodarilo sa získať žiadne dáta. Skontrolujte kľúčové slová alebo API odpoveď.")
             else:
                 wide_df = long_df.pivot(index='Date', columns='Keyword', values='Search Volume').fillna(0)
-
+                
                 start_date_pd = pd.to_datetime(start_date)
                 end_date_pd = pd.to_datetime(end_date)
                 wide_df_filtered = wide_df[(wide_df.index.to_period('M') >= start_date_pd.to_period('M')) & (wide_df.index.to_period('M') <= end_date_pd.to_period('M'))]
@@ -103,15 +110,4 @@ if run_button:
 
                     st.header("Share of Volume (Mesačný priemer)")
                     avg_sov = sov_df.mean()
-                    fig_pie = px.pie(values=avg_sov.values, names=avg_sov.index, title=f'Priemerný podiel za obdobie {start_date.strftime("%d.%m.%Y")} - {end_date.strftime("%d.%m.%Y")}', hole=.4)
-                    st.plotly_chart(fig_pie, use_container_width=True)
-
-                    st.header("Vývoj Share of Volume v čase (Mesačne)")
-                    fig_bar = px.bar(sov_df, x=sov_df.index, y=sov_df.columns, title='Mesačný vývoj SoV', labels={'value': 'Share of Volume (%)', 'index': 'Mesiac', 'variable': 'Kľúčové slovo'})
-                    st.plotly_chart(fig_bar, use_container_width=True)
-
-                    st.header("Podkladové dáta (Mesačný objem vyhľadávaní)")
-                    st.dataframe(wide_df_filtered.drop(columns='Total Volume'))
-
-        except Exception as e:
-            st.error(f"Vyskytla sa chyba: {e}")
+                    fig_pie = px.pie(values=avg_sov.values, names=avg_sov.index, title
