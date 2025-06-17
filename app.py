@@ -15,14 +15,20 @@ def fetch_mm_data(api_key, keywords_string, country_code):
     """
     Sťahuje dáta o hľadanosti z Marketing Miner API pomocou GET požiadavky s manuálne vytvorenou URL.
     """
-    # Manuálne poskladáme URL, aby sme mali 100% istotu o jej formáte
-    # Použijeme quote na zakódovanie reťazca s kľúčovými slovami pre prípad špeciálnych znakov
     keywords_encoded = quote(keywords_string)
-    endpoint = f"{MM_API_URL}/keywords/search-volume-data?api_token={api_key}&lang={country_code}&keyword={keywords_encoded}"
+    
+    # Manuálne poskladáme URL, aby sme mali 100% istotu o jej formáte
+    endpoint_url = f"{MM_API_URL}/keywords/search-volume-data?api_token={api_key}&lang={country_code}&keyword={keywords_encoded}"
+    
+    # =================================================================
+    # DÔLEŽITÝ DEBUGGOVACÍ KROK: Vypíšeme finálnu URL na obrazovku
+    st.info("Finálna URL adresa, ktorá sa posiela na server:")
+    st.code(endpoint_url, language="text")
+    # =================================================================
     
     st.info(f"Posielam požiadavku na Marketing Miner API...")
     # Posielame GET požiadavku priamo na zloženú URL
-    response = requests.get(endpoint)
+    response = requests.get(endpoint_url)
 
     if response.status_code != 200:
         raise Exception(f"Chyba pri komunikácii s Marketing Miner API: {response.status_code} - {response.text}")
@@ -53,7 +59,7 @@ def process_mm_response(json_data):
 
 # --- Hlavná aplikácia ---
 st.title("🚀 Share of Volume Analýza (cez Marketing Miner API)")
-st.markdown("Finálna verzia (v4) - Postavená podľa presnej dokumentácie.")
+st.markdown("Verzia (v5) s diagnostikou - Postavená podľa presnej dokumentácie.")
 
 # --- Vstupné polia v bočnom paneli ---
 with st.sidebar:
