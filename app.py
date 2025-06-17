@@ -30,7 +30,7 @@ def fetch_mm_data(api_key, keywords_string, country_code):
     st.success("Dáta z Marketing Miner úspešne stiahnuté!")
     return response.json()
 
-# OPRAVENÁ FUNKCIA NA SPRACOVANIE ODPOVEDE
+# FINÁLNE OPRAVENÁ FUNKCIA NA SPRACOVANIE ODPOVEDE
 def process_mm_response(json_data):
     """
     Spracuje JSON odpoveď z Marketing Miner do čistého Pandas DataFrame.
@@ -38,26 +38,29 @@ def process_mm_response(json_data):
     all_data = []
     # Skontrolujeme, či je status v poriadku
     if json_data.get('status') == 'success':
-        # Dáta sú v zozname (liste), takže iterujeme priamo cez neho
-        for keyword_data in json_data.get('data', []):
-            keyword_name = keyword_data.get('keyword')
-            if 'search_volume' in keyword_data:
-                for date_str, volume in keyword_data['search_volume'].items():
+        # Dáta sú v slovníku (dictionary), kde kľúč je hľadané slovo. Iterujeme cez kľúče a hodnoty.
+        for keyword_name, keyword_info in json_data.get('data', {}).items():
+            # Keyword_info je ďalší slovník, ktorý obsahuje dáta pre jedno slovo
+            if isinstance(keyword_info, dict) and 'search_volume' in keyword_info:
+                for date_str, volume in keyword_info['search_volume'].items():
                     all_data.append({
                         'Keyword': keyword_name,
                         'Date': datetime.strptime(date_str, '%Y-%m'),
                         'Search Volume': volume
                     })
+    
     if not all_data:
-        if 'message' in json_data:
-             raise Exception(f"API vrátilo chybu: {json_data['message']}")
+        # Ak sme nenašli dáta, skontrolujeme, či API nevrátilo nejakú chybu vnútri odpovede
+        if 'result' in json_data and 'errors' in json_data['result'] and json_data['result']['errors']:
+             raise Exception(f"API vrátilo chybu v dátach: {json_data['result']['errors']}")
         return pd.DataFrame()
         
     return pd.DataFrame(all_data)
 
+
 # --- Hlavná aplikácia ---
 st.title("🚀 Share of Volume Analýza (cez Marketing Miner API)")
-st.markdown("Finálna verzia (v6) - Postavená podľa presnej dokumentácie.")
+st.markdown("Finálna verzia (v7) - Postavená podľa presnej dokumentácie.")
 
 # --- Vstupné polia v bočnom paneli ---
 with st.sidebar:
@@ -95,7 +98,7 @@ if run_button:
             long_df = process_mm_response(raw_data)
 
             if long_df.empty:
-                st.error("Nepodarilo sa získať žiadne dáta. Skontrolujte kľúčové slová alebo či API nevrátilo chybu.")
+                st.error("Nepodarilo sa získať žiadne dáta. Skontrolujte kľúčové slová alebo či API nevrátilo chybu v odpovedi.")
             else:
                 wide_df = long_df.pivot(index='Date', columns='Keyword', values='Search Volume').fillna(0)
                 
