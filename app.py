@@ -30,15 +30,19 @@ def fetch_mm_data(api_key, keywords_string, country_code):
     st.success("Dáta z Marketing Miner úspešne stiahnuté!")
     return response.json()
 
+# OPRAVENÁ FUNKCIA NA SPRACOVANIE ODPOVEDE
 def process_mm_response(json_data):
     """
     Spracuje JSON odpoveď z Marketing Miner do čistého Pandas DataFrame.
     """
     all_data = []
+    # Skontrolujeme, či je status v poriadku
     if json_data.get('status') == 'success':
-        for keyword_name, keyword_info in json_data.get('data', {}).items():
-            if 'search_volume' in keyword_info:
-                for date_str, volume in keyword_info['search_volume'].items():
+        # Dáta sú v zozname (liste), takže iterujeme priamo cez neho
+        for keyword_data in json_data.get('data', []):
+            keyword_name = keyword_data.get('keyword')
+            if 'search_volume' in keyword_data:
+                for date_str, volume in keyword_data['search_volume'].items():
                     all_data.append({
                         'Keyword': keyword_name,
                         'Date': datetime.strptime(date_str, '%Y-%m'),
@@ -53,7 +57,7 @@ def process_mm_response(json_data):
 
 # --- Hlavná aplikácia ---
 st.title("🚀 Share of Volume Analýza (cez Marketing Miner API)")
-st.markdown("Finálna verzia (v5) - Postavená podľa presnej dokumentácie.")
+st.markdown("Finálna verzia (v6) - Postavená podľa presnej dokumentácie.")
 
 # --- Vstupné polia v bočnom paneli ---
 with st.sidebar:
@@ -66,7 +70,6 @@ with st.sidebar:
     keywords_input = st.text_area("Zadajte kľúčové slová (oddelené čiarkou)", "fingo, hyponamiru")
     keyword_list = [kw.strip() for kw in keywords_input.split(',') if kw.strip()]
 
-    # OPRAVENÝ KÓD KRAJINY PRE ČESKO
     country_mapping = {'Slovensko': 'sk', 'Česko': 'cs'}
     selected_country_name = st.selectbox("Zvoľte krajinu", options=list(country_mapping.keys()))
     country_code = country_mapping[selected_country_name]
@@ -87,6 +90,7 @@ if run_button:
         try:
             keywords_string = ','.join(keyword_list)
             
+            # Použijeme cachovanie, takže opätovné spustenie nebude míňať kredity
             raw_data = fetch_mm_data(api_key, keywords_string, country_code)
             long_df = process_mm_response(raw_data)
 
