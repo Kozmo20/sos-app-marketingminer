@@ -16,18 +16,12 @@ def fetch_mm_data(api_key, keywords_string, country_code):
     Sťahuje dáta o hľadanosti z Marketing Miner API pomocou GET požiadavky s manuálne vytvorenou URL.
     """
     keywords_encoded = quote(keywords_string)
-    
-    # Manuálne poskladáme URL, aby sme mali 100% istotu o jej formáte
     endpoint_url = f"{MM_API_URL}/keywords/search-volume-data?api_token={api_key}&lang={country_code}&keyword={keywords_encoded}"
     
-    # =================================================================
-    # DÔLEŽITÝ DEBUGGOVACÍ KROK: Vypíšeme finálnu URL na obrazovku
     st.info("Finálna URL adresa, ktorá sa posiela na server:")
     st.code(endpoint_url, language="text")
-    # =================================================================
     
     st.info(f"Posielam požiadavku na Marketing Miner API...")
-    # Posielame GET požiadavku priamo na zloženú URL
     response = requests.get(endpoint_url)
 
     if response.status_code != 200:
@@ -59,7 +53,7 @@ def process_mm_response(json_data):
 
 # --- Hlavná aplikácia ---
 st.title("🚀 Share of Volume Analýza (cez Marketing Miner API)")
-st.markdown("Verzia (v5) s diagnostikou - Postavená podľa presnej dokumentácie.")
+st.markdown("Finálna verzia (v5) - Postavená podľa presnej dokumentácie.")
 
 # --- Vstupné polia v bočnom paneli ---
 with st.sidebar:
@@ -69,10 +63,11 @@ with st.sidebar:
     if not api_key:
         st.error("Chýba API kľúč! Nastavte ho prosím v 'Settings -> Secrets'.")
 
-    keywords_input = st.text_area("Zadajte kľúčové slová (oddelené čiarkou)", "Adidas, Nike, Reebok, Puma")
+    keywords_input = st.text_area("Zadajte kľúčové slová (oddelené čiarkou)", "fingo, hyponamiru")
     keyword_list = [kw.strip() for kw in keywords_input.split(',') if kw.strip()]
 
-    country_mapping = {'Slovensko': 'sk', 'Česko': 'cz'}
+    # OPRAVENÝ KÓD KRAJINY PRE ČESKO
+    country_mapping = {'Slovensko': 'sk', 'Česko': 'cs'}
     selected_country_name = st.selectbox("Zvoľte krajinu", options=list(country_mapping.keys()))
     country_code = country_mapping[selected_country_name]
 
