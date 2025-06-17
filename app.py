@@ -6,27 +6,24 @@ from datetime import datetime
 
 # --- Konfigurácia stránky ---
 st.set_page_config(page_title="Share of Volume | Marketing Miner API", layout="wide")
-# SPRÁVNA ZÁKLADNÁ ADRESA PODĽA NOVÉHO ODKAZU
 MM_API_URL = "https://profilers-api.marketingminer.com"
 
 # --- Funkcia na sťahovanie dát z Marketing Miner API (s cachovaním) ---
 @st.cache_data(ttl="24h")
-def fetch_mm_data(api_key, keywords, country_code):
+def fetch_mm_data(api_key, keywords_string, country_code):
     """
-    Sťahuje dáta o hľadanosti z Marketing Miner API pomocou GET požiadavky.
+    Sťahuje dáta o hľadanosti z Marketing Miner API podľa presnej dokumentácie.
     """
-    # SPRÁVNA CESTA K ENDPOINTU PODĽA NOVÉHO ODKAZU
     endpoint = f"{MM_API_URL}/keywords/search-volume-data"
     
-    # Parametre sa posielajú priamo v URL, nie v tele
+    # Parametre presne podľa funkčného príkladu
     params = {
-        'token': api_key,
-        'database': country_code,
-        'keywords': list(keywords)
+        'api_token': api_key,
+        'lang': country_code,
+        'keyword': keywords_string
     }
 
-    st.info(f"Posielam požiadavku na Marketing Miner API pre {len(keywords)} kľúčových slov...")
-    # Používame GET požiadavku
+    st.info(f"Posielam požiadavku na Marketing Miner API...")
     response = requests.get(endpoint, params=params)
 
     if response.status_code != 200:
@@ -40,22 +37,27 @@ def process_mm_response(json_data):
     Spracuje JSON odpoveď z Marketing Miner do čistého Pandas DataFrame.
     """
     all_data = []
-    # Spracovanie odpovede zostáva rovnaké, ak je štruktúra dát podobná
-    for keyword, data in json_data.get('result', {}).items():
-        if data.get('status') == 'ok' and 'search_volume' in data:
-            for date_str, volume in data['search_volume'].items():
-                all_data.append({
-                    'Keyword': keyword,
-                    'Date': datetime.strptime(date_str, '%Y-%m'),
-                    'Search Volume': volume
-                })
+    # Spracovanie odpovede podľa štruktúry z príkladu
+    if json_data.get('status') == 'success':
+        for keyword_name, keyword_info in json_data.get('data', {}).items():
+            if 'search_volume' in keyword_info:
+                for date_str, volume in keyword_info['search_volume'].items():
+                    all_data.append({
+                        'Keyword': keyword_name,
+                        'Date': datetime.strptime(date_str, '%Y-%m'),
+                        'Search Volume': volume
+                    })
     if not all_data:
+        # Skúsime alternatívnu štruktúru pre prípad chyby
+        if 'message' in json_data:
+             raise Exception(f"API vrátilo chybu: {json_data['message']}")
         return pd.DataFrame()
+        
     return pd.DataFrame(all_data)
 
 # --- Hlavná aplikácia ---
 st.title("🚀 Share of Volume Analýza (cez Marketing Miner API)")
-st.markdown("Finálna verzia (v2) napojená na Marketing Miner API pre stabilné dáta.")
+st.markdown("Finálna verzia (v3) - Postavená podľa presnej dokumentácie.")
 
 # --- Vstupné polia v bočnom paneli ---
 with st.sidebar:
@@ -86,11 +88,14 @@ if run_button:
         st.warning("Prosím, zadajte aspoň jedno kľúčové slovo.")
     else:
         try:
-            raw_data = fetch_mm_data(api_key, tuple(keyword_list), country_code)
+            # Spojenie kľúčových slov do jedného reťazca
+            keywords_string = ','.join(keyword_list)
+            
+            raw_data = fetch_mm_data(api_key, keywords_string, country_code)
             long_df = process_mm_response(raw_data)
 
             if long_df.empty:
-                st.error("Nepodarilo sa získať žiadne dáta. Skontrolujte kľúčové slová alebo API odpoveď.")
+                st.error("Nepodarilo sa získať žiadne dáta. Skontrolujte kľúčové slová alebo či API nevrátilo chybu.")
             else:
                 wide_df = long_df.pivot(index='Date', columns='Keyword', values='Search Volume').fillna(0)
                 
