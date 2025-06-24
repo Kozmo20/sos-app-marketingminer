@@ -43,7 +43,7 @@ def fetch_mm_data(api_key, keyword_list, country_code):
 def process_mm_response(json_data):
     """
     Spracuje JSON odpoveď z Marketing Miner do čistého Pandas DataFrame.
-    Upravená verzia pre správnu štruktúru API odpovede.
+    Upravená verzia pre správnu štruktúru API odpovede Marketing Miner.
     """
     # Debug: Zobrazíme štruktúru JSON odpovede
     st.subheader("🔍 Debug: Štruktúra JSON odpovede")
@@ -60,92 +60,80 @@ def process_mm_response(json_data):
     data = json_data.get('data', [])
     
     if not data:
-        st.warning("API vrátilo prázdne dáta. Možné príčiny:")
-        st.info("• Kľúčové slová nie sú dostupné pre zvolenú krajinu")
-        st.info("• Kľúčové slová majú príliš nízku hľadanosť")
-        st.info("• Problém s formátom požiadavky")
+        st.warning("API vrátilo prázdne dáta.")
         return pd.DataFrame()
     
     # Spracujeme dáta - očakávame pole objektov
     if isinstance(data, list):
         st.info(f"Spracovávam {len(data)} kľúčových slov z API")
         
+        # Aktuálny rok - predpokladáme, že mesačné dáta sú z posledných 12 mesiacov
+        current_year = datetime.now().year
+        
         for item in data:
             if not isinstance(item, dict):
                 continue
                 
             # Získame názov kľúčového slova
-            keyword_name = item.get('keyword', item.get('term', 'Unknown'))
+            keyword_name = item.get('keyword', 'Unknown')
             
-            # Hľadáme mesačné dáta v rôznych možných kľúčoch
-            monthly_data = None
-            for possible_key in ['monthly_searches', 'search_volume', 'monthly_data', 'data', 'volumes', 'history']:
-                if possible_key in item:
-                    monthly_data = item[possible_key]
-                    break
+            # Hľadáme mesačné dáta v 'monthly_sv'
+            monthly_data = item.get('monthly_sv', {})
             
             if not monthly_data:
                 st.warning(f"Nenašli sa mesačné dáta pre kľúčové slovo: {keyword_name}")
                 continue
             
-            # Spracujeme mesačné dáta
-            if isinstance(monthly_data, dict):
-                # Formát: {"2024-01": 1000, "2024-02": 1200}
-                for date_str, volume in monthly_data.items():
-                    try:
-                        # Skúsime rôzne formáty dátumu
-                        date_obj = None
-                        for date_format in ['%Y-%m', '%Y-%m-%d', '%m/%Y', '%m-%Y']:
-                            try:
-                                date_obj = datetime.strptime(date_str, date_format)
-                                break
-                            except ValueError:
-                                continue
-                        
-                        if date_obj:
-                            all_data.append({
-                                'Keyword': keyword_name,
-                                'Date': date_obj,
-                                'Search Volume': int(volume) if isinstance(volume, (int, float, str)) and str(volume).isdigit() else 0
-                            })
-                    except (ValueError, TypeError) as e:
-                        st.warning(f"Problém s dátumom '{date_str}' pre kľúčové slovo '{keyword_name}': {e}")
-                        continue
-                        
-            elif isinstance(monthly_data, list):
-                # Formát: [{"date": "2024-01", "volume": 1000}, ...]
-                for month_item in monthly_data:
-                    if isinstance(month_item, dict):
-                        date_str = month_item.get('date', month_item.get('month', ''))
-                        volume = month_item.get('volume', month_item.get('searches', 0))
-                        
-                        if date_str:
-                            try:
-                                date_obj = datetime.strptime(date_str, '%Y-%m')
-                                all_data.append({
-                                    'Keyword': keyword_name,
-                                    'Date': date_obj,
-                                    'Search Volume': int(volume) if isinstance(volume, (int, float, str)) and str(volume).isdigit() else 0
-                                })
-                            except ValueError:
-                                continue
+            st.info(f"Spracovávam mesačné dáta pre '{keyword_name}': {monthly_data}")
             
-            # Ak máme len jedno číslo (celkový objem), vytvoríme záznam pre aktuálny mesiac
-            elif isinstance(monthly_data, (int, float)):
-                current_date = datetime.now().replace(day=1)
-                all_data.append({
-                    'Keyword': keyword_name,
-                    'Date': current_date,
-                    'Search Volume': int(monthly_data)
-                })
+            # Spracujeme mesačné dáta - formát {"10": 180, "11": 210, ...}
+            if isinstance(monthly_data, dict):
+                for month_str, volume in monthly_data.items():
+                    try:
+                        # Konvertujeme mesiac na číslo
+                        month_num = int(month_str)
+                        
+                        # Vytvoríme dátum - použijeme aktuálny rok pre mesiace <= aktuálny mesiac
+                        # a predchádzajúci rok pre mesiace > aktuálny mesiac
+                        current_month = datetime.now().month
+                        
+                        if month_num <= current_month:
+                            year = current_year
+                        else:
+                            year = current_year - 1
+                        
+                        # Vytvoríme dátum
+                        date_obj = datetime(year, month_num, 1)
+                        
+                        # Pridáme záznam
+                        volume_int = int(volume) if isinstance(volume, (int, float, str)) and str(volume).replace('-', '').isdigit() else 0
+                        
+                        all_data.append({
+                            'Keyword': keyword_name,
+                            'Date': date_obj,
+                            'Search Volume': volume_int
+                        })
+                        
+                    except (ValueError, TypeError) as e:
+                        st.warning(f"Problém s mesiacom '{month_str}' pre kľúčové slovo '{keyword_name}': {e}")
+                        continue
     
-    st.info(f"Úspešne spracované {len(all_data)} mesačných záznamov")
+    st.success(f"Úspešne spracované {len(all_data)} mesačných záznamov")
     
     if not all_data:
         st.error("Nepodarilo sa extrahovať žiadne platné dáta z API odpovede")
         return pd.DataFrame()
-        
-    return pd.DataFrame(all_data)
+    
+    # Zoradíme dáta podľa dátumu
+    df = pd.DataFrame(all_data)
+    df = df.sort_values('Date')
+    
+    # Zobrazíme debug informácie o dátumoch
+    st.info("Spracované dátumy:")
+    for _, row in df.iterrows():
+        st.text(f"  {row['Keyword']}: {row['Date'].strftime('%Y-%m')} -> {row['Search Volume']}")
+    
+    return df
 
 
 # --- Hlavná aplikácia (zvyšok kódu je pravdepodobne v poriadku) ---
