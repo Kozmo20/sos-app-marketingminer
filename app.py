@@ -12,35 +12,62 @@ MM_API_URL = "https://profilers-api.marketingminer.com"
 
 # --- Funkcia na sťahovanie dát z Marketing Miner API (s cachovaním) ---
 @st.cache_data(ttl="24h")
-def fetch_mm_data(api_key, keyword_list, country_code):
+def fetch_mm_data_single(api_key, keyword, country_code):
     """
-    Sťahuje dáta o hľadanosti z Marketing Miner API pomocou GET požiadavky.
-    Používa správny formát s viacerými keyword parametrami.
+    Sťahuje dáta pre jedno kľúčové slovo z Marketing Miner API.
     """
-    # Vytvoríme URL s viacerými keyword parametrami
     base_url = f"{MM_API_URL}/keywords/search-volume-data?api_token={api_key}&lang={country_code}"
+    endpoint_url = f"{base_url}&keyword={quote(keyword.strip())}"
     
-    # Pridáme každé kľúčové slovo ako samostatný parameter
-    keyword_params = []
-    for keyword in keyword_list:
-        keyword_params.append(f"keyword={quote(keyword.strip())}")
-    
-    # Finálna URL
-    endpoint_url = base_url + "&" + "&".join(keyword_params)
-    
-    st.info("Finálna URL adresa, ktorá sa posiela na server:")
+    st.info(f"Volám API pre kľúčové slovo: '{keyword}'")
     st.code(endpoint_url, language="text")
     
-    # Debug: Zobrazme koľko kľúčových slov posielame
-    st.info(f"Posielam požiadavku pre {len(keyword_list)} kľúčových slov: {', '.join(keyword_list)}")
-    
     response = requests.get(endpoint_url)
-
+    
     if response.status_code != 200:
-        raise Exception(f"Chyba pri komunikácii s Marketing Miner API: {response.status_code} - {response.text}")
-
-    st.success("Dáta z Marketing Miner úspešne stiahnuté!")
+        raise Exception(f"Chyba pri komunikácii s Marketing Miner API pre '{keyword}': {response.status_code} - {response.text}")
+    
     return response.json()
+
+def fetch_mm_data(api_key, keyword_list, country_code):
+    """
+    Sťahuje dáta pre všetky kľúčové slová - každé volanie osobne.
+    Toto rieši problém, keď API berie len posledné kľúčové slovo z viacerých parametrov.
+    """
+    all_responses = []
+    
+    st.info(f"Spúšťam {len(keyword_list)} samostatných API volaní pre: {', '.join(keyword_list)}")
+    
+    progress_bar = st.progress(0)
+    
+    for i, keyword in enumerate(keyword_list):
+        try:
+            st.info(f"Spracovávam kľúčové slovo {i+1}/{len(keyword_list)}: '{keyword}'")
+            
+            response = fetch_mm_data_single(api_key, keyword, country_code)
+            all_responses.append(response)
+            
+            progress_bar.progress((i + 1) / len(keyword_list))
+            
+        except Exception as e:
+            st.error(f"Chyba pri spracovaní kľúčového slova '{keyword}': {e}")
+            continue
+    
+    # Skombinujeme všetky odpovede do jednej štruktúry
+    combined_response = {
+        'status': 'success',
+        'data': []
+    }
+    
+    for response in all_responses:
+        if response.get('status') == 'success' and 'data' in response:
+            if isinstance(response['data'], list):
+                combined_response['data'].extend(response['data'])
+            else:
+                combined_response['data'].append(response['data'])
+    
+    st.success(f"Úspešne stiahnuté dáta pre {len(all_responses)} kľúčových slov!")
+    return combined_response
 
 def process_mm_response(json_data):
     """
@@ -142,7 +169,7 @@ def process_mm_response(json_data):
 
 # --- Hlavná aplikácia ---
 st.title("🚀 Share of Volume Analýza (cez Marketing Miner API)")
-st.markdown("Finálna verzia (v9) - Opravený problém s viacerými kľúčovými slovami.")
+st.markdown("Finálna verzia (v10) - Opravené: samostatné API volania pre každé kľúčové slovo + info o 12-mesačnom obmedzení.")
 
 with st.sidebar:
     st.header("⚙️ Nastavenia analýzy")
@@ -162,8 +189,16 @@ with st.sidebar:
     country_code = country_mapping[selected_country_name]
 
     st.markdown("### Zvoľte časové obdobie pre zobrazenie")
-    start_date = st.date_input("Dátum od", datetime(datetime.now().year - 3, 1, 1))
-    end_date = st.date_input("Dátum do", datetime.now())
+    st.info("⚠️ Poznámka: Marketing Miner API poskytuje dáta len za posledných 12 mesiacov")
+    
+    # Nastavíme rozumné defaultné obdobie - posledných 12 mesiacov
+    default_start = datetime.now().replace(day=1) - pd.DateOffset(months=11)
+    start_date = st.date_input("Dátum od", default_start.date())
+    end_date = st.date_input("Dátum do", datetime.now().date())
+    
+    # Upozornenie ak si používateľ vyberie príliš staré dátumy  
+    if start_date < (datetime.now() - pd.DateOffset(months=12)).date():
+        st.warning("⚠️ Vybrané obdobie môže obsahovať mesiace, pre ktoré API neposkytuje dáta (staršie ako 12 mesiacov).")
 
     run_button = st.button(label="Spustiť analýzu")
 
