@@ -19,9 +19,6 @@ def fetch_mm_data_single(api_key, keyword, country_code):
     base_url = f"{MM_API_URL}/keywords/search-volume-data?api_token={api_key}&lang={country_code}"
     endpoint_url = f"{base_url}&keyword={quote(keyword.strip())}"
     
-    st.info(f"Volám API pre kľúčové slovo: '{keyword}'")
-    st.code(endpoint_url, language="text")
-    
     response = requests.get(endpoint_url)
     
     if response.status_code != 200:
@@ -36,13 +33,15 @@ def fetch_mm_data(api_key, keyword_list, country_code):
     """
     all_responses = []
     
-    st.info(f"Spúšťam {len(keyword_list)} samostatných API volaní pre: {', '.join(keyword_list)}")
+    # Hlavná informácia - viditeľná
+    st.info(f"📡 Načítavam dáta pre {len(keyword_list)} kľúčových slov...")
     
     progress_bar = st.progress(0)
+    status_placeholder = st.empty()
     
     for i, keyword in enumerate(keyword_list):
         try:
-            st.info(f"Spracovávam kľúčové slovo {i+1}/{len(keyword_list)}: '{keyword}'")
+            status_placeholder.text(f"Spracovávam: '{keyword}' ({i+1}/{len(keyword_list)})")
             
             response = fetch_mm_data_single(api_key, keyword, country_code)
             all_responses.append(response)
@@ -50,8 +49,12 @@ def fetch_mm_data(api_key, keyword_list, country_code):
             progress_bar.progress((i + 1) / len(keyword_list))
             
         except Exception as e:
-            st.error(f"Chyba pri spracovaní kľúčového slova '{keyword}': {e}")
+            st.error(f"❌ Chyba pri spracovaní kľúčového slova '{keyword}': {e}")
             continue
+    
+    # Vyčistíme progress indikátory
+    progress_bar.empty()
+    status_placeholder.empty()
     
     # Skombinujeme všetky odpovede do jednej štruktúry
     combined_response = {
@@ -66,7 +69,7 @@ def fetch_mm_data(api_key, keyword_list, country_code):
             else:
                 combined_response['data'].append(response['data'])
     
-    st.success(f"Úspešne stiahnuté dáta pre {len(all_responses)} kľúčových slov!")
+    st.success(f"✅ Úspešne načítané dáta pre {len(all_responses)} kľúčových slov!")
     return combined_response
 
 def process_mm_response(json_data):
@@ -74,10 +77,6 @@ def process_mm_response(json_data):
     Spracuje JSON odpoveď z Marketing Miner do čistého Pandas DataFrame.
     Upravená verzia pre správnu štruktúru API odpovede Marketing Miner.
     """
-    # Debug: Zobrazíme štruktúru JSON odpovede
-    st.subheader("🔍 Debug: Štruktúra JSON odpovede")
-    st.json(json_data)
-    
     all_data = []
     processed_keywords = []  # Sledujeme aké kľúčové slová sme skutočně spracovali
     
@@ -93,10 +92,14 @@ def process_mm_response(json_data):
         st.warning("API vrátilo prázdne dáta.")
         return pd.DataFrame(), []
     
+    # Debug informácie - skryté pod expander
+    with st.expander("🔍 Zobraziť technické detaily spracovania", expanded=False):
+        st.subheader("Štruktúra JSON odpovede")
+        st.json(json_data)
+        st.info(f"Spracovávam {len(data)} kľúčových slov z API")
+    
     # Spracujeme dáta - očakávame pole objektov
     if isinstance(data, list):
-        st.info(f"Spracovávam {len(data)} kľúčových slov z API")
-        
         # Aktuálny rok - predpokladáme, že mesačné dáta sú z posledných 12 mesiacov
         current_year = datetime.now().year
         
@@ -112,10 +115,13 @@ def process_mm_response(json_data):
             monthly_data = item.get('monthly_sv', {})
             
             if not monthly_data:
-                st.warning(f"Nenašli sa mesačné dáta pre kľúčové slovo: {keyword_name}")
+                with st.expander("⚠️ Varovania", expanded=False):
+                    st.warning(f"Nenašli sa mesačné dáta pre kľúčové slovo: {keyword_name}")
                 continue
             
-            st.info(f"Spracovávam mesačné dáta pre '{keyword_name}': {monthly_data}")
+            # Debug informácie - skryté
+            with st.expander("🔍 Zobraziť technické detaily spracovania", expanded=False):
+                st.info(f"Spracovávam mesačné dáta pre '{keyword_name}': {monthly_data}")
             
             # Spracujeme mesačné dáta - formát {"10": 180, "11": 210, ...}
             if isinstance(monthly_data, dict):
@@ -146,10 +152,24 @@ def process_mm_response(json_data):
                         })
                         
                     except (ValueError, TypeError) as e:
-                        st.warning(f"Problém s mesiacom '{month_str}' pre kľúčové slovo '{keyword_name}': {e}")
+                        with st.expander("⚠️ Varovania", expanded=False):
+                            st.warning(f"Problém s mesiacom '{month_str}' pre kľúčové slovo '{keyword_name}': {e}")
                         continue
     
-    st.success(f"Úspešne spracované {len(all_data)} mesačných záznamov pre kľúčové slová: {', '.join(processed_keywords)}")
+    # Hlavná informácia - viditeľná
+    st.success(f"✅ Spracované dáta pre kľúčové slová: {', '.join(processed_keywords)}")
+    
+    # Debug informácie - skryté
+    with st.expander("🔍 Zobraziť detailné informácie o spracovaných dátumoch", expanded=False):
+        st.info(f"Celkový počet záznamov: {len(all_data)}")
+        if all_data:
+            df_temp = pd.DataFrame(all_data)
+            st.info("Prehľad spracovaných dátumov:")
+            for keyword in processed_keywords:
+                keyword_data = df_temp[df_temp['Keyword'] == keyword]
+                if not keyword_data.empty:
+                    dates = keyword_data['Date'].dt.strftime('%Y-%m').unique()
+                    st.text(f"  {keyword}: {', '.join(sorted(dates))}")
     
     if not all_data:
         st.error("Nepodarilo sa extrahovať žiadne platné dáta z API odpovede")
@@ -159,17 +179,12 @@ def process_mm_response(json_data):
     df = pd.DataFrame(all_data)
     df = df.sort_values('Date')
     
-    # Zobrazíme debug informácie o dátumoch
-    st.info("Spracované dátumy:")
-    for _, row in df.iterrows():
-        st.text(f"  {row['Keyword']}: {row['Date'].strftime('%Y-%m')} -> {row['Search Volume']}")
-    
     return df, processed_keywords
 
 
 # --- Hlavná aplikácia ---
 st.title("🚀 Share of Volume Analýza (cez Marketing Miner API)")
-st.markdown("Finálna verzia (v10) - Opravené: samostatné API volania pre každé kľúčové slovo + info o 12-mesačnom obmedzení.")
+st.markdown("**Finálna verzia (v11)** - Čisté UI: všetky technické detaily sú skryté pod expandery.")
 
 with st.sidebar:
     st.header("⚙️ Nastavenia analýzy")
@@ -181,8 +196,9 @@ with st.sidebar:
     keywords_input = st.text_area("Zadajte kľúčové slová (oddelené čiarkou)", "fingo, hyponamiru")
     keyword_list = [kw.strip() for kw in keywords_input.split(',') if kw.strip()]
     
-    # Debug: Zobrazme spracované kľúčové slová
-    st.info(f"Spracované kľúčové slová ({len(keyword_list)}): {', '.join(keyword_list)}")
+    # Debug: Zobrazme spracované kľúčové slová - skryté
+    with st.expander("🔍 Zobraziť spracované kľúčové slová", expanded=False):
+        st.info(f"Spracované kľúčové slová ({len(keyword_list)}): {', '.join(keyword_list)}")
 
     country_mapping = {'Slovensko': 'sk', 'Česko': 'cs'}
     selected_country_name = st.selectbox("Zvoľte krajinu", options=list(country_mapping.keys()))
@@ -220,9 +236,11 @@ if run_button:
                 # Vytvoríme pivot tabuľku
                 wide_df = long_df.pivot(index='Date', columns='Keyword', values='Search Volume').fillna(0)
                 
-                # Debug: Zobrazme aké stĺpce máme v DataFrame
-                st.info(f"Stĺpce v DataFrame: {list(wide_df.columns)}")
-                st.info(f"Skutočne spracované kľúčové slová z API: {actual_keywords}")
+                # Debug informácie - skryté
+                with st.expander("🔍 Zobraziť technické detaily DataFrame", expanded=False):
+                    st.info(f"Stĺpce v DataFrame: {list(wide_df.columns)}")
+                    st.info(f"Skutočne spracované kľúčové slová z API: {actual_keywords}")
+                    st.dataframe(wide_df.head())
                 
                 # Filtrujeme podľa dátumu
                 start_date_pd = pd.to_datetime(start_date)
@@ -238,23 +256,27 @@ if run_button:
                     # Vytvoríme Share of Volume DataFrame
                     sov_df = pd.DataFrame(index=wide_df_filtered.index)
                     
-                    # OPRAVA: Používame skutočné názvy stĺpcov z DataFrame namiesto pôvodného keyword_list
+                    # Používame skutočné názvy stĺpcov z DataFrame namiesto pôvodného keyword_list
                     available_keywords = [col for col in wide_df_filtered.columns if col != 'Total Volume']
                     
-                    st.info(f"Počítam SoV pre dostupné kľúčové slová: {available_keywords}")
+                    # Debug informácie - skryté
+                    with st.expander("🔍 Zobraziť výpočet Share of Volume", expanded=False):
+                        st.info(f"Počítam SoV pre dostupné kľúčové slová: {available_keywords}")
+                        st.dataframe(wide_df_filtered)
                     
                     for kw in available_keywords:
                         sov_df[kw] = wide_df_filtered.apply(
                             lambda row: (row[kw] / row['Total Volume']) * 100 if row['Total Volume'] > 0 else 0, axis=1)
 
                     # Zobrazenie výsledkov
-                    st.header("Share of Volume (Mesačný priemer)")
+                    st.header("📊 Share of Volume (Mesačný priemer)")
                     avg_sov = sov_df.mean()
                     
-                    # Debug: Zobrazme priemerné hodnoty
-                    st.info("Priemerné SoV hodnoty:")
-                    for kw, avg_val in avg_sov.items():
-                        st.text(f"  {kw}: {avg_val:.2f}%")
+                    # Debug informácie - skryté 
+                    with st.expander("🔍 Zobraziť priemerné SoV hodnoty", expanded=False):
+                        st.info("Priemerné SoV hodnoty:")
+                        for kw, avg_val in avg_sov.items():
+                            st.text(f"  {kw}: {avg_val:.2f}%")
                     
                     fig_pie = px.pie(
                         values=avg_sov.values, 
@@ -264,7 +286,7 @@ if run_button:
                     )
                     st.plotly_chart(fig_pie, use_container_width=True)
 
-                    st.header("Vývoj Share of Volume v čase (Mesačne)")
+                    st.header("📈 Vývoj Share of Volume v čase (Mesačne)")
                     fig_bar = px.bar(
                         sov_df, 
                         x=sov_df.index, 
@@ -274,8 +296,9 @@ if run_button:
                     )
                     st.plotly_chart(fig_bar, use_container_width=True)
 
-                    st.header("Podkladové dáta (Mesačný objem vyhľadávaní)")
-                    st.dataframe(wide_df_filtered.drop(columns='Total Volume'))
+                    # Podkladové dáta - skryté pod expander
+                    with st.expander("📋 Zobraziť podkladové dáta (Mesačný objem vyhľadávaní)", expanded=False):
+                        st.dataframe(wide_df_filtered.drop(columns='Total Volume'))
 
         except Exception as e:
             st.error(f"Vyskytla sa chyba: {e}")
