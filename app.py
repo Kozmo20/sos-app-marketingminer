@@ -35,7 +35,7 @@ def fetch_mm_data(api_key, keyword_list, country_code):
     """
     all_responses = []
     
-    # Hlavná informácia - viditeľná len pri chybe
+    # Progress indikátory
     progress_bar = st.progress(0)
     status_placeholder = st.empty()
     
@@ -77,7 +77,8 @@ def process_mm_response(json_data):
     Upravená verzia pre správnu štruktúru API odpovede Marketing Miner.
     """
     all_data = []
-    processed_keywords = []  # Sledujeme aké kľúčové slová sme skutočně spracovali
+    processed_keywords = []
+    debug_info = []  # Zbierame debug informácie
     
     # Skontrolujeme, či je status v poriadku
     if json_data.get('status') != 'success':
@@ -89,13 +90,9 @@ def process_mm_response(json_data):
     
     if not data:
         st.warning("API vrátilo prázdne dáta.")
-        return pd.DataFrame(), []
+        return pd.DataFrame(), [], debug_info, json_data
     
-    # Debug informácie - skryté pod expander
-    with st.expander("🔍 Zobraziť technické detaily spracovania", expanded=False):
-        st.subheader("Štruktúra JSON odpovede")
-        st.json(json_data)
-        st.info(f"Spracovávam {len(data)} kľúčových slov z API")
+    debug_info.append(f"Spracovávam {len(data)} kľúčových slov z API")
     
     # Spracujeme dáta - očakávame pole objektov
     if isinstance(data, list):
@@ -114,13 +111,10 @@ def process_mm_response(json_data):
             monthly_data = item.get('monthly_sv', {})
             
             if not monthly_data:
-                with st.expander("⚠️ Varovania", expanded=False):
-                    st.warning(f"Nenašli sa mesačné dáta pre kľúčové slovo: {keyword_name}")
+                debug_info.append(f"Nenašli sa mesačné dáta pre kľúčové slovo: {keyword_name}")
                 continue
             
-            # Debug informácie - skryté
-            with st.expander("🔍 Zobraziť technické detaily spracovania", expanded=False):
-                st.info(f"Spracovávam mesačné dáta pre '{keyword_name}': {monthly_data}")
+            debug_info.append(f"Spracovávam mesačné dáta pre '{keyword_name}': {monthly_data}")
             
             # Spracujeme mesačné dáta - formát {"10": 180, "11": 210, ...}
             if isinstance(monthly_data, dict):
@@ -151,34 +145,31 @@ def process_mm_response(json_data):
                         })
                         
                     except (ValueError, TypeError) as e:
-                        with st.expander("⚠️ Varovania", expanded=False):
-                            st.warning(f"Problém s mesiacom '{month_str}' pre kľúčové slovo '{keyword_name}': {e}")
+                        debug_info.append(f"Problém s mesiacom '{month_str}' pre kľúčové slovo '{keyword_name}': {e}")
                         continue
     
-    # Hlavná informácia - viditeľná
-    st.success(f"✅ Spracované dáta pre kľúčové slová: {', '.join(processed_keywords)}")
+    # Len jedna správa o úspešnom spracovaní
+    if processed_keywords:
+        st.success(f"✅ Úspešne spracované dáta pre: {', '.join(processed_keywords)}")
     
-    # Debug informácie - skryté
-    with st.expander("🔍 Zobraziť detailné informácie o spracovaných dátumoch", expanded=False):
-        st.info(f"Celkový počet záznamov: {len(all_data)}")
-        if all_data:
-            df_temp = pd.DataFrame(all_data)
-            st.info("Prehľad spracovaných dátumov:")
-            for keyword in processed_keywords:
-                keyword_data = df_temp[df_temp['Keyword'] == keyword]
-                if not keyword_data.empty:
-                    dates = keyword_data['Date'].dt.strftime('%Y-%m').unique()
-                    st.text(f"  {keyword}: {', '.join(sorted(dates))}")
+    debug_info.append(f"Celkový počet záznamov: {len(all_data)}")
+    if all_data:
+        df_temp = pd.DataFrame(all_data)
+        for keyword in processed_keywords:
+            keyword_data = df_temp[df_temp['Keyword'] == keyword]
+            if not keyword_data.empty:
+                dates = keyword_data['Date'].dt.strftime('%Y-%m').unique()
+                debug_info.append(f"  {keyword}: {', '.join(sorted(dates))}")
     
     if not all_data:
         st.error("Nepodarilo sa extrahovať žiadne platné dáta z API odpovede")
-        return pd.DataFrame(), []
+        return pd.DataFrame(), [], debug_info, json_data
     
     # Zoradíme dáta podľa dátumu
     df = pd.DataFrame(all_data)
     df = df.sort_values('Date')
     
-    return df, processed_keywords
+    return df, processed_keywords, debug_info, json_data
 
 
 # --- Hlavná aplikácia ---
@@ -187,7 +178,7 @@ st.title("🚀 Invelity Share of Volume Analýza")
 # Informačný panel - zbalený v expanderi
 with st.expander("ℹ️ Informácie o aplikácii", expanded=False):
     st.markdown("**Dátový zdroj:** Marketing Miner API")
-    st.markdown("**Verzia:** v12 - Vylepšené rozloženie grafov s koláčovým grafom vedľa stĺpcového grafu a pridaným čiarovým grafom")
+    st.markdown("**Verzia:** v13 - Vyčistené notifikácie a technické detaily")
     st.markdown("**Vývojár:** Invelity")
 
 with st.sidebar:
@@ -238,7 +229,7 @@ if run_button:
     else:
         try:
             raw_data = fetch_mm_data(api_key, keyword_list, country_code)
-            long_df, actual_keywords = process_mm_response(raw_data)
+            long_df, actual_keywords, debug_info, json_data = process_mm_response(raw_data)
 
             if long_df.empty:
                 st.error("Nepodarilo sa získať žiadne dáta. Skontrolujte technické detaily nižšie.")
@@ -343,13 +334,12 @@ if run_button:
                     )
                     st.plotly_chart(fig_volume, use_container_width=True)
 
-                    # Podkladové dáta a technické informácie - všetko v jednom expanderi
+                    # Podkladové dáta a technické informácie - jeden veľký expander
                     with st.expander("🔧 Technické detaily a podkladové dáta", expanded=False):
-                        # Debug informácie z API volania
-                        if 'debug_info' in st.session_state:
-                            st.subheader("Debug informácie zo spracovania")
-                            for info in st.session_state.debug_info:
-                                st.text(f"• {info}")
+                        # Debug informácie zo spracovania
+                        st.subheader("Debug informácie zo spracovania")
+                        for info in debug_info:
+                            st.text(f"• {info}")
                         
                         # Priemerné SoV hodnoty
                         st.subheader("Priemerné SoV hodnoty")
@@ -364,18 +354,9 @@ if run_button:
                         st.info(f"Počítam SoV pre dostupné kľúčové slová: {available_keywords}")
                         st.info(f"Celkový počet záznamov: {len(long_df)}")
                         
-                        # Prehľad spracovaných dátumov
-                        st.subheader("Prehľad spracovaných dátumov")
-                        for keyword in actual_keywords:
-                            keyword_data = long_df[long_df['Keyword'] == keyword]
-                            if not keyword_data.empty:
-                                dates = keyword_data['Date'].dt.strftime('%Y-%m').unique()
-                                st.text(f"  {keyword}: {', '.join(sorted(dates))}")
-                        
                         # JSON odpoveď z API
-                        if 'json_data' in st.session_state:
-                            st.subheader("Štruktúra JSON odpovede z API")
-                            st.json(st.session_state.json_data)
+                        st.subheader("Štruktúra JSON odpovede z API")
+                        st.json(json_data)
                         
                         # Surové dáta DataFrame
                         st.subheader("Surové dáta (prvých 10 riadkov)")
@@ -396,4 +377,4 @@ if run_button:
 
         except Exception as e:
             st.error(f"Vyskytla sa chyba: {e}")
-            st.error("Skúste skontrolovať debug informácie vyššie pre viac detailov.")
+            st.error("Skúste skontrolovať technické detaily v expanderi nižšie pre viac informácií.")
