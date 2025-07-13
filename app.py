@@ -1,6 +1,8 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 import requests
 from datetime import datetime
 from urllib.parse import quote
@@ -184,7 +186,7 @@ def process_mm_response(json_data):
 
 # --- Hlavná aplikácia ---
 st.title("🚀 Share of Volume Analýza (cez Marketing Miner API)")
-st.markdown("**Finálna verzia (v11)** - Čisté UI: všetky technické detaily sú skryté pod expandery.")
+st.markdown("**Finálna verzia (v12)** - Vylepšené rozloženie grafov s koláčovým grafom vedľa stĺpcového grafu a pridaným čiarovým grafom.")
 
 with st.sidebar:
     st.header("⚙️ Nastavenia analýzy")
@@ -268,37 +270,95 @@ if run_button:
                         sov_df[kw] = wide_df_filtered.apply(
                             lambda row: (row[kw] / row['Total Volume']) * 100 if row['Total Volume'] > 0 else 0, axis=1)
 
-                    # Zobrazenie výsledkov
-                    st.header("📊 Share of Volume (Mesačný priemer)")
-                    avg_sov = sov_df.mean()
+                    # Zobrazenie výsledkov - vylepšené rozloženie
+                    st.header("📊 Share of Volume - Prehľad")
                     
-                    # Debug informácie - skryté 
-                    with st.expander("🔍 Zobraziť priemerné SoV hodnoty", expanded=False):
-                        st.info("Priemerné SoV hodnoty:")
-                        for kw, avg_val in avg_sov.items():
-                            st.text(f"  {kw}: {avg_val:.2f}%")
+                    # Vytvoríme dva stĺpce pre koláčový graf a stĺpcový graf
+                    col1, col2 = st.columns([1, 2])
                     
-                    fig_pie = px.pie(
-                        values=avg_sov.values, 
-                        names=avg_sov.index, 
-                        title=f'Priemerný podiel za obdobie {start_date.strftime("%d.%m.%Y")} - {end_date.strftime("%d.%m.%Y")}', 
-                        hole=.4
-                    )
-                    st.plotly_chart(fig_pie, use_container_width=True)
+                    with col1:
+                        st.subheader("Mesačný priemer")
+                        avg_sov = sov_df.mean()
+                        
+                        # Debug informácie - skryté 
+                        with st.expander("🔍 Zobraziť priemerné SoV hodnoty", expanded=False):
+                            st.info("Priemerné SoV hodnoty:")
+                            for kw, avg_val in avg_sov.items():
+                                st.text(f"  {kw}: {avg_val:.2f}%")
+                        
+                        fig_pie = px.pie(
+                            values=avg_sov.values, 
+                            names=avg_sov.index, 
+                            title=f'Priemerný podiel za obdobie<br>{start_date.strftime("%d.%m.%Y")} - {end_date.strftime("%d.%m.%Y")}', 
+                            hole=.4
+                        )
+                        fig_pie.update_layout(height=500)
+                        st.plotly_chart(fig_pie, use_container_width=True)
+                    
+                    with col2:
+                        st.subheader("Mesačný vývoj (Stĺpcový graf)")
+                        fig_bar = px.bar(
+                            sov_df, 
+                            x=sov_df.index, 
+                            y=sov_df.columns, 
+                            title='Mesačný vývoj Share of Volume (%)', 
+                            labels={'value': 'Share of Volume (%)', 'index': 'Mesiac', 'variable': 'Kľúčové slovo'},
+                            height=500
+                        )
+                        fig_bar.update_layout(
+                            xaxis_title="Mesiac",
+                            yaxis_title="Share of Volume (%)",
+                            legend_title="Kľúčové slovo"
+                        )
+                        st.plotly_chart(fig_bar, use_container_width=True)
 
-                    st.header("📈 Vývoj Share of Volume v čase (Mesačne)")
-                    fig_bar = px.bar(
+                    # Pridáme čiarový graf
+                    st.header("📈 Vývoj Share of Volume v čase (Čiarový graf)")
+                    fig_line = px.line(
                         sov_df, 
                         x=sov_df.index, 
-                        y=sov_df.columns, 
-                        title='Mesačný vývoj SoV', 
-                        labels={'value': 'Share of Volume (%)', 'index': 'Mesiac', 'variable': 'Kľúčové slovo'}
+                        y=sov_df.columns,
+                        title='Trendy Share of Volume pre jednotlivých konkurentov',
+                        labels={'value': 'Share of Volume (%)', 'index': 'Mesiac', 'variable': 'Kľúčové slovo'},
+                        height=400,
+                        markers=True
                     )
-                    st.plotly_chart(fig_bar, use_container_width=True)
+                    fig_line.update_layout(
+                        xaxis_title="Mesiac",
+                        yaxis_title="Share of Volume (%)",
+                        legend_title="Kľúčové slovo",
+                        hovermode='x unified'
+                    )
+                    st.plotly_chart(fig_line, use_container_width=True)
+
+                    # Pridáme aj graf absolútnych hodnôt
+                    st.header("📊 Absolútne hodnoty vyhľadávaní")
+                    volume_df = wide_df_filtered.drop(columns='Total Volume')
+                    
+                    fig_volume = px.line(
+                        volume_df, 
+                        x=volume_df.index, 
+                        y=volume_df.columns,
+                        title='Mesačný objem vyhľadávaní (absolútne hodnoty)',
+                        labels={'value': 'Počet vyhľadávaní', 'index': 'Mesiac', 'variable': 'Kľúčové slovo'},
+                        height=400,
+                        markers=True
+                    )
+                    fig_volume.update_layout(
+                        xaxis_title="Mesiac",
+                        yaxis_title="Počet vyhľadávaní",
+                        legend_title="Kľúčové slovo",
+                        hovermode='x unified'
+                    )
+                    st.plotly_chart(fig_volume, use_container_width=True)
 
                     # Podkladové dáta - skryté pod expander
-                    with st.expander("📋 Zobraziť podkladové dáta (Mesačný objem vyhľadávaní)", expanded=False):
-                        st.dataframe(wide_df_filtered.drop(columns='Total Volume'))
+                    with st.expander("📋 Zobraziť podkladové dáta", expanded=False):
+                        st.subheader("Share of Volume (%)")
+                        st.dataframe(sov_df.round(2))
+                        
+                        st.subheader("Mesačný objem vyhľadávaní")
+                        st.dataframe(volume_df)
 
         except Exception as e:
             st.error(f"Vyskytla sa chyba: {e}")
