@@ -268,6 +268,11 @@ if run_button:
                         st.subheader("Mesačný priemer")
                         avg_sov = sov_df.mean()
                         
+                        # Malý dropdown s priemernými SoV hodnotami nad koláčovým grafom
+                        with st.expander("📊 Priemerné SoV hodnoty", expanded=False):
+                            for kw, avg_val in avg_sov.items():
+                                st.text(f"  {kw}: {avg_val:.2f}%")
+                        
                         fig_pie = px.pie(
                             values=avg_sov.values, 
                             names=avg_sov.index, 
@@ -276,11 +281,6 @@ if run_button:
                         )
                         fig_pie.update_layout(height=500)
                         st.plotly_chart(fig_pie, use_container_width=True)
-                        
-                        # Pridáme priemerné SoV hodnoty ku koláčovému grafu
-                        st.subheader("Priemerné SoV hodnoty")
-                        for kw, avg_val in avg_sov.items():
-                            st.metric(label=kw, value=f"{avg_val:.2f}%")
                     
                     with col2:
                         st.subheader("Mesačný vývoj (Stĺpcový graf)")
