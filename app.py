@@ -185,40 +185,53 @@ def process_mm_response(json_data):
 
 
 # --- Hlavná aplikácia ---
-st.title("🚀 Share of Volume Analýza (cez Marketing Miner API)")
-st.markdown("**Finálna verzia (v12)** - Vylepšené rozloženie grafov s koláčovým grafom vedľa stĺpcového grafu a pridaným čiarovým grafom.")
+st.title("🚀 Invelity Share of Volume Analýza")
+
+# Informačný panel - zbalený v expanderi
+with st.expander("ℹ️ Informácie o aplikácii", expanded=False):
+    st.markdown("**Dátový zdroj:** Marketing Miner API")
+    st.markdown("**Verzia:** v12 - Vylepšené rozloženie grafov s koláčovým grafom vedľa stĺpcového grafu a pridaným čiarovým grafom")
+    st.markdown("**Vývojár:** Invelity")
 
 with st.sidebar:
     st.header("⚙️ Nastavenia analýzy")
 
+    # API kľúč kontrola
     api_key = st.secrets.get("MARKETING_MINER_API_KEY", "")
     if not api_key:
         st.error("Chýba API kľúč! Nastavte ho prosím v 'Settings -> Secrets'.")
 
-    keywords_input = st.text_area("Zadajte kľúčové slová (oddelené čiarkou)", "fingo, hyponamiru")
-    keyword_list = [kw.strip() for kw in keywords_input.split(',') if kw.strip()]
-    
-    # Debug: Zobrazme spracované kľúčové slová - skryté
-    with st.expander("🔍 Zobraziť spracované kľúčové slová", expanded=False):
+    # Základné nastavenia - hlavný expander
+    with st.expander("🎯 Základné nastavenia", expanded=True):
+        keywords_input = st.text_area("Zadajte kľúčové slová (oddelené čiarkou)", "fingo, hyponamiru")
+        keyword_list = [kw.strip() for kw in keywords_input.split(',') if kw.strip()]
+        
+        country_mapping = {'Slovensko': 'sk', 'Česko': 'cs'}
+        selected_country_name = st.selectbox("Zvoľte krajinu", options=list(country_mapping.keys()))
+        country_code = country_mapping[selected_country_name]
+
+    # Časové obdobie - druhý expander
+    with st.expander("📅 Časové obdobie", expanded=True):
+        st.info("⚠️ Marketing Miner API poskytuje dáta len za posledných 12 mesiacov")
+        
+        # Nastavíme rozumné defaultné obdobie - posledných 12 mesiacov
+        default_start = datetime.now().replace(day=1) - pd.DateOffset(months=11)
+        start_date = st.date_input("Dátum od", default_start.date())
+        end_date = st.date_input("Dátum do", datetime.now().date())
+        
+        # Upozornenie ak si používateľ vyberie príliš staré dátumy  
+        if start_date < (datetime.now() - pd.DateOffset(months=12)).date():
+            st.warning("⚠️ Vybrané obdobie môže obsahovať mesiace, pre ktoré API neposkytuje dáta (staršie ako 12 mesiacov).")
+
+    # Debug informácie - tretí expander (zbalený)
+    with st.expander("🔍 Debug informácie", expanded=False):
         st.info(f"Spracované kľúčové slová ({len(keyword_list)}): {', '.join(keyword_list)}")
+        st.info(f"Krajina: {selected_country_name} ({country_code})")
+        st.info(f"Obdobie: {start_date} - {end_date}")
 
-    country_mapping = {'Slovensko': 'sk', 'Česko': 'cs'}
-    selected_country_name = st.selectbox("Zvoľte krajinu", options=list(country_mapping.keys()))
-    country_code = country_mapping[selected_country_name]
-
-    st.markdown("### Zvoľte časové obdobie pre zobrazenie")
-    st.info("⚠️ Poznámka: Marketing Miner API poskytuje dáta len za posledných 12 mesiacov")
-    
-    # Nastavíme rozumné defaultné obdobie - posledných 12 mesiacov
-    default_start = datetime.now().replace(day=1) - pd.DateOffset(months=11)
-    start_date = st.date_input("Dátum od", default_start.date())
-    end_date = st.date_input("Dátum do", datetime.now().date())
-    
-    # Upozornenie ak si používateľ vyberie príliš staré dátumy  
-    if start_date < (datetime.now() - pd.DateOffset(months=12)).date():
-        st.warning("⚠️ Vybrané obdobie môže obsahovať mesiace, pre ktoré API neposkytuje dáta (staršie ako 12 mesiacov).")
-
-    run_button = st.button(label="Spustiť analýzu")
+    # Tlačidlo na spustenie
+    st.markdown("---")
+    run_button = st.button(label="🚀 Spustiť analýzu", type="primary")
 
 if run_button:
     if not api_key:
