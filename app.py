@@ -7,119 +7,10 @@ import requests
 from datetime import datetime
 from urllib.parse import quote
 import json
-import base64
-from io import BytesIO
-import plotly.io as pio
 
 # --- Konfigurácia stránky ---
 st.set_page_config(page_title="Share of Volume | Marketing Miner API", layout="wide")
 MM_API_URL = "https://profilers-api.marketingminer.com"
-
-# --- Funkcia pre export PDF ---
-def create_pdf_export(sov_df, volume_df, avg_sov, start_date, end_date, keywords):
-    """
-    Vytvorí jednoduchý PDF report s kľúčovými údajmi
-    """
-    try:
-        from reportlab.lib.pagesizes import letter, A4
-        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
-        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-        from reportlab.lib.units import inch
-        from reportlab.lib import colors
-        
-        buffer = BytesIO()
-        doc = SimpleDocTemplate(buffer, pagesize=A4)
-        styles = getSampleStyleSheet()
-        story = []
-        
-        # Nadpis
-        title_style = ParagraphStyle(
-            'CustomTitle',
-            parent=styles['Heading1'],
-            fontSize=20,
-            spaceAfter=30,
-            textColor=colors.darkblue
-        )
-        story.append(Paragraph("Share of Volume Analýza", title_style))
-        story.append(Spacer(1, 20))
-        
-        # Základné informácie
-        info_style = styles['Normal']
-        story.append(Paragraph(f"<b>Obdobie:</b> {start_date.strftime('%d.%m.%Y')} - {end_date.strftime('%d.%m.%Y')}", info_style))
-        story.append(Paragraph(f"<b>Kľúčové slová:</b> {', '.join(keywords)}", info_style))
-        story.append(Paragraph(f"<b>Dátum vytvorenia:</b> {datetime.now().strftime('%d.%m.%Y %H:%M')}", info_style))
-        story.append(Spacer(1, 20))
-        
-        # Priemerné SoV hodnoty
-        story.append(Paragraph("<b>Priemerné Share of Volume hodnoty:</b>", styles['Heading2']))
-        avg_data = [['Kľúčové slovo', 'Priemerný podiel (%)']]
-        for kw, avg_val in avg_sov.items():
-            avg_data.append([kw, f"{avg_val:.2f}%"])
-        
-        avg_table = Table(avg_data)
-        avg_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 14),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-            ('GRID', (0, 0), (-1, -1), 1, colors.black)
-        ]))
-        story.append(avg_table)
-        story.append(Spacer(1, 20))
-        
-        # SoV tabuľka (posledných 6 mesiacov)
-        story.append(Paragraph("<b>Share of Volume (%) - Posledných 6 mesiacov:</b>", styles['Heading2']))
-        sov_recent = sov_df.tail(6)
-        sov_data = [['Mesiac'] + list(sov_recent.columns)]
-        for date, row in sov_recent.iterrows():
-            row_data = [date.strftime('%Y-%m')] + [f"{val:.1f}%" for val in row.values]
-            sov_data.append(row_data)
-        
-        sov_table = Table(sov_data)
-        sov_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 12),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-            ('GRID', (0, 0), (-1, -1), 1, colors.black)
-        ]))
-        story.append(sov_table)
-        
-        doc.build(story)
-        buffer.seek(0)
-        return buffer
-        
-    except ImportError:
-        st.error("Pre PDF export je potrebné nainštalovať reportlab: pip install reportlab")
-        return None
-    except Exception as e:
-        st.error(f"Chyba pri vytváraní PDF: {e}")
-        return None
-
-# --- Funkcia pre export grafov ako obrázky ---
-def export_plots_as_images(fig_pie, fig_bar, fig_line, fig_volume):
-    """
-    Exportuje grafy ako obrázky a vráti ich ako base64
-    """
-    images = {}
-    
-    try:
-        # Exportujeme každý graf ako PNG
-        for name, fig in [("pie", fig_pie), ("bar", fig_bar), ("line", fig_line), ("volume", fig_volume)]:
-            img_bytes = pio.to_image(fig, format="png", width=800, height=600)
-            img_base64 = base64.b64encode(img_bytes).decode()
-            images[name] = img_base64
-        
-        return images
-    except Exception as e:
-        st.error(f"Chyba pri exportovaní grafov: {e}")
-        return None
 
 # --- Funkcia na sťahovanie dát z Marketing Miner API (s cachovaním) ---
 @st.cache_data(ttl="24h")
@@ -284,12 +175,6 @@ def process_mm_response(json_data):
 # --- Hlavná aplikácia ---
 st.title("🚀 Invelity Share of Volume Analýza")
 
-# Export tlačidlá v pravom hornom rohu
-col_title, col_export = st.columns([4, 1])
-with col_export:
-    st.markdown("### Export")
-    export_placeholder = st.empty()  # Placeholder pre export tlačidlá
-
 # Informačný panel - zbalený v expanderi
 with st.expander("ℹ️ Informácie o aplikácii", expanded=False):
     st.markdown("**Dátový zdroj:** Marketing Miner API")
@@ -453,48 +338,6 @@ if run_button:
                         hovermode='x unified'
                     )
                     st.plotly_chart(fig_volume, use_container_width=True)
-
-                    # Export funkcie - aktualizujeme placeholder
-                    with export_placeholder.container():
-                        # PDF Export
-                        pdf_buffer = create_pdf_export(sov_df, volume_df, avg_sov, start_date, end_date, available_keywords)
-                        if pdf_buffer:
-                            st.download_button(
-                                label="📄 Export PDF",
-                                data=pdf_buffer,
-                                file_name=f"share_of_volume_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf",
-                                mime="application/pdf",
-                                help="Stiahnuť PDF report s kľúčovými údajmi"
-                            )
-                        
-                        # Screenshot HTML (alternativa ak nie je k dispozícii screenshot)
-                        html_content = f"""
-                        <script>
-                        function takeScreenshot() {{
-                            if (typeof html2canvas !== 'undefined') {{
-                                html2canvas(document.body).then(canvas => {{
-                                    const link = document.createElement('a');
-                                    link.download = 'share_of_volume_screenshot.png';
-                                    link.href = canvas.toDataURL();
-                                    link.click();
-                                }});
-                            }} else {{
-                                alert('Screenshot funkcia nie je k dispozícii. Použite tlačidlo Print Screen alebo screenshot z prehliadača.');
-                            }}
-                        }}
-                        </script>
-                        <button onclick="takeScreenshot()" style="
-                            background-color: #ff6b6b;
-                            color: white;
-                            border: none;
-                            padding: 8px 16px;
-                            border-radius: 4px;
-                            cursor: pointer;
-                            font-size: 14px;
-                            margin-top: 5px;
-                        ">📸 Screenshot</button>
-                        """
-                        st.markdown(html_content, unsafe_allow_html=True)
 
                     # Samostatné dropdowny pre Share of Volume a Mesačný objem vyhľadávaní
                     with st.expander("📋 Share of Volume - Detailná tabuľka", expanded=False):
