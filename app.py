@@ -7,6 +7,7 @@ import requests
 from datetime import datetime
 from urllib.parse import quote
 import json
+import calendar
 
 # --- Konfigurácia stránky ---
 st.set_page_config(page_title="Share of Volume | Marketing Miner API", layout="wide")
@@ -191,7 +192,7 @@ with st.sidebar:
 
     # Základné nastavenia - hlavný expander
     with st.expander("🎯 Základné nastavenia", expanded=True):
-        keywords_input = st.text_area("Zadajte kľúčové slová (oddelené čiarkou)", "fingo, hyponamiru")
+        keywords_input = st.text_area("Zadajte kľúčové slová (oddelené čiarkou)", "konkurent 1, konkurent 2")
         keyword_list = [kw.strip() for kw in keywords_input.split(',') if kw.strip()]
         
         country_mapping = {'Slovensko': 'sk', 'Česko': 'cs'}
@@ -202,10 +203,20 @@ with st.sidebar:
     with st.expander("📅 Časové obdobie", expanded=True):
         st.info("⚠️ Marketing Miner API poskytuje dáta len za posledných 12 mesiacov")
         
-        # Nastavíme rozumné defaultné obdobie - posledných 12 mesiacov
-        default_start = datetime.now().replace(day=1) - pd.DateOffset(months=11)
+        # Nastavíme defaultné obdobie - koniec predchádzajúceho mesiaca
+        today = datetime.now()
+        
+        # Získame prvý deň aktuálneho mesiaca
+        first_day_current_month = today.replace(day=1)
+        
+        # Posledný deň predchádzajúceho mesiaca
+        last_day_previous_month = first_day_current_month - pd.Timedelta(days=1)
+        
+        # Začiatočný dátum - 12 mesiacov pred koncom predchádzajúceho mesiaca
+        default_start = last_day_previous_month.replace(day=1) - pd.DateOffset(months=11)
+        
         start_date = st.date_input("Dátum od", default_start.date())
-        end_date = st.date_input("Dátum do", datetime.now().date())
+        end_date = st.date_input("Dátum do", last_day_previous_month.date())
         
         # Upozornenie ak si používateľ vyberie príliš staré dátumy  
         if start_date < (datetime.now() - pd.DateOffset(months=12)).date():
