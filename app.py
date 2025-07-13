@@ -276,6 +276,11 @@ if run_button:
                         )
                         fig_pie.update_layout(height=500)
                         st.plotly_chart(fig_pie, use_container_width=True)
+                        
+                        # Pridáme priemerné SoV hodnoty ku koláčovému grafu
+                        st.subheader("Priemerné SoV hodnoty")
+                        for kw, avg_val in avg_sov.items():
+                            st.metric(label=kw, value=f"{avg_val:.2f}%")
                     
                     with col2:
                         st.subheader("Mesačný vývoj (Stĺpcový graf)")
@@ -334,18 +339,21 @@ if run_button:
                     )
                     st.plotly_chart(fig_volume, use_container_width=True)
 
+                    # Samostatné dropdowny pre Share of Volume a Mesačný objem vyhľadávaní
+                    with st.expander("📋 Share of Volume - Detailná tabuľka", expanded=False):
+                        st.subheader("Share of Volume (%)")
+                        st.dataframe(sov_df.round(2))
+                    
+                    with st.expander("📋 Mesačný objem vyhľadávaní - Detailná tabuľka", expanded=False):
+                        st.subheader("Mesačný objem vyhľadávaní (absolútne hodnoty)")
+                        st.dataframe(volume_df)
+
                     # Podkladové dáta a technické informácie - jeden veľký expander
                     with st.expander("🔧 Technické detaily a podkladové dáta", expanded=False):
                         # Debug informácie zo spracovania
                         st.subheader("Debug informácie zo spracovania")
                         for info in debug_info:
                             st.text(f"• {info}")
-                        
-                        # Priemerné SoV hodnoty
-                        st.subheader("Priemerné SoV hodnoty")
-                        avg_sov = sov_df.mean()
-                        for kw, avg_val in avg_sov.items():
-                            st.text(f"  {kw}: {avg_val:.2f}%")
                         
                         # DataFrame detaily
                         st.subheader("Technické detaily DataFrame")
@@ -365,15 +373,6 @@ if run_button:
                         # Filtrované dáta pre výpočet
                         st.subheader("Filtrované dáta pre výpočet SoV")
                         st.dataframe(wide_df_filtered.drop(columns='Total Volume'))
-                        
-                        # Share of Volume tabuľka
-                        st.subheader("Share of Volume (%)")
-                        st.dataframe(sov_df.round(2))
-                        
-                        # Mesačný objem vyhľadávaní
-                        st.subheader("Mesačný objem vyhľadávaní")
-                        volume_df = wide_df_filtered.drop(columns='Total Volume')
-                        st.dataframe(volume_df)
 
         except Exception as e:
             st.error(f"Vyskytla sa chyba: {e}")
