@@ -35,9 +35,7 @@ def fetch_mm_data(api_key, keyword_list, country_code):
     """
     all_responses = []
     
-    # Hlavná informácia - viditeľná
-    st.info(f"📡 Načítavam dáta pre {len(keyword_list)} kľúčových slov...")
-    
+    # Hlavná informácia - viditeľná len pri chybe
     progress_bar = st.progress(0)
     status_placeholder = st.empty()
     
@@ -71,7 +69,6 @@ def fetch_mm_data(api_key, keyword_list, country_code):
             else:
                 combined_response['data'].append(response['data'])
     
-    st.success(f"✅ Úspešne načítané dáta pre {len(all_responses)} kľúčových slov!")
     return combined_response
 
 def process_mm_response(json_data):
@@ -244,18 +241,10 @@ if run_button:
             long_df, actual_keywords = process_mm_response(raw_data)
 
             if long_df.empty:
-                st.error("Nepodarilo sa získať žiadne dáta. Skontrolujte štruktúru JSON odpovede vyššie a kontaktujte podporu.")
+                st.error("Nepodarilo sa získať žiadne dáta. Skontrolujte technické detaily nižšie.")
             else:
-                st.success(f"Úspešne spracované dáta pre {len(long_df)} záznamov!")
-                
                 # Vytvoríme pivot tabuľku
                 wide_df = long_df.pivot(index='Date', columns='Keyword', values='Search Volume').fillna(0)
-                
-                # Debug informácie - skryté
-                with st.expander("🔍 Zobraziť technické detaily DataFrame", expanded=False):
-                    st.info(f"Stĺpce v DataFrame: {list(wide_df.columns)}")
-                    st.info(f"Skutočne spracované kľúčové slová z API: {actual_keywords}")
-                    st.dataframe(wide_df.head())
                 
                 # Filtrujeme podľa dátumu
                 start_date_pd = pd.to_datetime(start_date)
@@ -274,11 +263,6 @@ if run_button:
                     # Používame skutočné názvy stĺpcov z DataFrame namiesto pôvodného keyword_list
                     available_keywords = [col for col in wide_df_filtered.columns if col != 'Total Volume']
                     
-                    # Debug informácie - skryté
-                    with st.expander("🔍 Zobraziť výpočet Share of Volume", expanded=False):
-                        st.info(f"Počítam SoV pre dostupné kľúčové slová: {available_keywords}")
-                        st.dataframe(wide_df_filtered)
-                    
                     for kw in available_keywords:
                         sov_df[kw] = wide_df_filtered.apply(
                             lambda row: (row[kw] / row['Total Volume']) * 100 if row['Total Volume'] > 0 else 0, axis=1)
@@ -292,12 +276,6 @@ if run_button:
                     with col1:
                         st.subheader("Mesačný priemer")
                         avg_sov = sov_df.mean()
-                        
-                        # Debug informácie - skryté 
-                        with st.expander("🔍 Zobraziť priemerné SoV hodnoty", expanded=False):
-                            st.info("Priemerné SoV hodnoty:")
-                            for kw, avg_val in avg_sov.items():
-                                st.text(f"  {kw}: {avg_val:.2f}%")
                         
                         fig_pie = px.pie(
                             values=avg_sov.values, 
@@ -365,12 +343,55 @@ if run_button:
                     )
                     st.plotly_chart(fig_volume, use_container_width=True)
 
-                    # Podkladové dáta - skryté pod expander
-                    with st.expander("📋 Zobraziť podkladové dáta", expanded=False):
+                    # Podkladové dáta a technické informácie - všetko v jednom expanderi
+                    with st.expander("🔧 Technické detaily a podkladové dáta", expanded=False):
+                        # Debug informácie z API volania
+                        if 'debug_info' in st.session_state:
+                            st.subheader("Debug informácie zo spracovania")
+                            for info in st.session_state.debug_info:
+                                st.text(f"• {info}")
+                        
+                        # Priemerné SoV hodnoty
+                        st.subheader("Priemerné SoV hodnoty")
+                        avg_sov = sov_df.mean()
+                        for kw, avg_val in avg_sov.items():
+                            st.text(f"  {kw}: {avg_val:.2f}%")
+                        
+                        # DataFrame detaily
+                        st.subheader("Technické detaily DataFrame")
+                        st.info(f"Stĺpce v DataFrame: {list(wide_df.columns)}")
+                        st.info(f"Skutočne spracované kľúčové slová z API: {actual_keywords}")
+                        st.info(f"Počítam SoV pre dostupné kľúčové slová: {available_keywords}")
+                        st.info(f"Celkový počet záznamov: {len(long_df)}")
+                        
+                        # Prehľad spracovaných dátumov
+                        st.subheader("Prehľad spracovaných dátumov")
+                        for keyword in actual_keywords:
+                            keyword_data = long_df[long_df['Keyword'] == keyword]
+                            if not keyword_data.empty:
+                                dates = keyword_data['Date'].dt.strftime('%Y-%m').unique()
+                                st.text(f"  {keyword}: {', '.join(sorted(dates))}")
+                        
+                        # JSON odpoveď z API
+                        if 'json_data' in st.session_state:
+                            st.subheader("Štruktúra JSON odpovede z API")
+                            st.json(st.session_state.json_data)
+                        
+                        # Surové dáta DataFrame
+                        st.subheader("Surové dáta (prvých 10 riadkov)")
+                        st.dataframe(wide_df.head(10))
+                        
+                        # Filtrované dáta pre výpočet
+                        st.subheader("Filtrované dáta pre výpočet SoV")
+                        st.dataframe(wide_df_filtered.drop(columns='Total Volume'))
+                        
+                        # Share of Volume tabuľka
                         st.subheader("Share of Volume (%)")
                         st.dataframe(sov_df.round(2))
                         
+                        # Mesačný objem vyhľadávaní
                         st.subheader("Mesačný objem vyhľadávaní")
+                        volume_df = wide_df_filtered.drop(columns='Total Volume')
                         st.dataframe(volume_df)
 
         except Exception as e:
