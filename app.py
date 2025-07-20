@@ -13,6 +13,25 @@ import calendar
 st.set_page_config(page_title="Share of Volume | Marketing Miner API", layout="wide")
 MM_API_URL = "https://profilers-api.marketingminer.com"
 
+# --- Funkcia na vytvorenie konzistentnej farebnej palety ---
+def create_color_mapping(keywords):
+    """
+    Vytvorí konzistentnú farebnú paletu pre kľúčové slová.
+    """
+    # Použijeme Plotly default farby pre konzistenciu
+    plotly_colors = [
+        '#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd',
+        '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf',
+        '#aec7e8', '#ffbb78', '#98df8a', '#ff9896', '#c5b0d5',
+        '#c49c94', '#f7b6d3', '#c7c7c7', '#dbdb8d', '#9edae5'
+    ]
+    
+    color_mapping = {}
+    for i, keyword in enumerate(sorted(keywords)):  # Zoradíme pre konzistenciu
+        color_mapping[keyword] = plotly_colors[i % len(plotly_colors)]
+    
+    return color_mapping
+
 # --- Funkcia na sťahovanie dát z Marketing Miner API (s cachovaním) ---
 @st.cache_data(ttl="24h")
 def fetch_mm_data_single(api_key, keyword, country_code):
@@ -179,7 +198,7 @@ st.title("🚀 Invelity Share of Volume Analýza")
 # Informačný panel - zbalený v expanderi
 with st.expander("ℹ️ Informácie o aplikácii", expanded=False):
     st.markdown("**Dátový zdroj:** Marketing Miner API")
-    st.markdown("**Verzia:** v13 - Vyčistené notifikácie a technické detaily")
+    st.markdown("**Verzia:** v14 - Opravené konzistentné farby vo všetkých grafoch")
     st.markdown("**Vývojár:** Invelity")
 
 with st.sidebar:
@@ -265,6 +284,9 @@ if run_button:
                     # Používame skutočné názvy stĺpcov z DataFrame namiesto pôvodného keyword_list
                     available_keywords = [col for col in wide_df_filtered.columns if col != 'Total Volume']
                     
+                    # Vytvoríme konzistentnú farebnú paletu pre všetky grafy
+                    color_mapping = create_color_mapping(available_keywords)
+                    
                     for kw in available_keywords:
                         sov_df[kw] = wide_df_filtered.apply(
                             lambda row: (row[kw] / row['Total Volume']) * 100 if row['Total Volume'] > 0 else 0, axis=1)
@@ -284,69 +306,90 @@ if run_button:
                             for kw, avg_val in avg_sov.items():
                                 st.text(f"  {kw}: {avg_val:.2f}%")
                         
-                        fig_pie = px.pie(
-                            values=avg_sov.values, 
-                            names=avg_sov.index, 
-                            title=f'Priemerný podiel za obdobie<br>{start_date.strftime("%d.%m.%Y")} - {end_date.strftime("%d.%m.%Y")}', 
-                            hole=.4
+                        # Koláčový graf s konzistentnými farbami
+                        fig_pie = go.Figure()
+                        fig_pie.add_trace(go.Pie(
+                            labels=avg_sov.index,
+                            values=avg_sov.values,
+                            hole=.4,
+                            marker=dict(colors=[color_mapping[kw] for kw in avg_sov.index])
+                        ))
+                        fig_pie.update_layout(
+                            title=f'Priemerný podiel za obdobie<br>{start_date.strftime("%d.%m.%Y")} - {end_date.strftime("%d.%m.%Y")}',
+                            height=500
                         )
-                        fig_pie.update_layout(height=500)
                         st.plotly_chart(fig_pie, use_container_width=True)
                     
                     with col2:
                         st.subheader("Mesačný vývoj (Stĺpcový graf)")
-                        fig_bar = px.bar(
-                            sov_df, 
-                            x=sov_df.index, 
-                            y=sov_df.columns, 
-                            title='Mesačný vývoj Share of Volume (%)', 
-                            labels={'value': 'Share of Volume (%)', 'index': 'Mesiac', 'variable': 'Kľúčové slovo'},
-                            height=500
-                        )
+                        
+                        # Stĺpcový graf s konzistentnými farbami
+                        fig_bar = go.Figure()
+                        for kw in available_keywords:
+                            fig_bar.add_trace(go.Bar(
+                                name=kw,
+                                x=sov_df.index,
+                                y=sov_df[kw],
+                                marker_color=color_mapping[kw]
+                            ))
+                        
                         fig_bar.update_layout(
+                            title='Mesačný vývoj Share of Volume (%)',
                             xaxis_title="Mesiac",
                             yaxis_title="Share of Volume (%)",
-                            legend_title="Kľúčové slovo"
+                            legend_title="Kľúčové slovo",
+                            barmode='stack',
+                            height=500
                         )
                         st.plotly_chart(fig_bar, use_container_width=True)
 
-                    # Pridáme čiarový graf
+                    # Pridáme čiarový graf s konzistentnými farbami
                     st.header("📈 Vývoj Share of Volume v čase (Čiarový graf)")
-                    fig_line = px.line(
-                        sov_df, 
-                        x=sov_df.index, 
-                        y=sov_df.columns,
-                        title='Trendy Share of Volume pre jednotlivých konkurentov',
-                        labels={'value': 'Share of Volume (%)', 'index': 'Mesiac', 'variable': 'Kľúčové slovo'},
-                        height=400,
-                        markers=True
-                    )
+                    fig_line = go.Figure()
+                    
+                    for kw in available_keywords:
+                        fig_line.add_trace(go.Scatter(
+                            x=sov_df.index,
+                            y=sov_df[kw],
+                            mode='lines+markers',
+                            name=kw,
+                            line=dict(color=color_mapping[kw]),
+                            marker=dict(color=color_mapping[kw])
+                        ))
+                    
                     fig_line.update_layout(
+                        title='Trendy Share of Volume pre jednotlivých konkurentov',
                         xaxis_title="Mesiac",
                         yaxis_title="Share of Volume (%)",
                         legend_title="Kľúčové slovo",
-                        hovermode='x unified'
+                        hovermode='x unified',
+                        height=400
                     )
                     st.plotly_chart(fig_line, use_container_width=True)
 
-                    # Pridáme aj graf absolútnych hodnôt
+                    # Pridáme aj graf absolútnych hodnôt s konzistentnými farbami
                     st.header("📊 Absolútne hodnoty vyhľadávaní")
                     volume_df = wide_df_filtered.drop(columns='Total Volume')
                     
-                    fig_volume = px.line(
-                        volume_df, 
-                        x=volume_df.index, 
-                        y=volume_df.columns,
-                        title='Mesačný objem vyhľadávaní (absolútne hodnoty)',
-                        labels={'value': 'Počet vyhľadávaní', 'index': 'Mesiac', 'variable': 'Kľúčové slovo'},
-                        height=400,
-                        markers=True
-                    )
+                    fig_volume = go.Figure()
+                    
+                    for kw in available_keywords:
+                        fig_volume.add_trace(go.Scatter(
+                            x=volume_df.index,
+                            y=volume_df[kw],
+                            mode='lines+markers',
+                            name=kw,
+                            line=dict(color=color_mapping[kw]),
+                            marker=dict(color=color_mapping[kw])
+                        ))
+                    
                     fig_volume.update_layout(
+                        title='Mesačný objem vyhľadávaní (absolútne hodnoty)',
                         xaxis_title="Mesiac",
                         yaxis_title="Počet vyhľadávaní",
                         legend_title="Kľúčové slovo",
-                        hovermode='x unified'
+                        hovermode='x unified',
+                        height=400
                     )
                     st.plotly_chart(fig_volume, use_container_width=True)
 
@@ -365,6 +408,11 @@ if run_button:
                         st.subheader("Debug informácie zo spracovania")
                         for info in debug_info:
                             st.text(f"• {info}")
+                        
+                        # Farebná paleta
+                        st.subheader("Použitá farebná paleta")
+                        for kw, color in color_mapping.items():
+                            st.markdown(f"**{kw}**: <span style='color:{color}'>●</span> {color}", unsafe_allow_html=True)
                         
                         # DataFrame detaily
                         st.subheader("Technické detaily DataFrame")
